@@ -56,33 +56,49 @@ namespace GeniView.Cloud.Services
             if (community == null)
                 throw new InvalidOperationException($"CommunityID '{batch.CommunityId}' was not found in the central database.");
 
-            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
             var processed = new List<long>();
             var alreadyProcessed = new List<long>();
 
-            foreach (var message in batch.Messages.OrderBy(x => x.QueueId))
+            // EF Core's retrying execution strategy must wrap all transactional work,
+            // including BeginTransaction/SaveChanges/Commit, for PostgreSQL compatibility.
+            var strategy = _db.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
 
-                if (!string.Equals(message.Topic?.Split('/').FirstOrDefault(), "battery", StringComparison.OrdinalIgnoreCase) ||
-                    !message.Topic.StartsWith("battery/log/", StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    throw new InvalidOperationException($"Unsupported sync topic '{message.Topic}'. Flow 1 currently supports battery/log only.");
-                }
+                    foreach (var message in batch.Messages.OrderBy(x => x.QueueId))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
 
-                if (await IsAlreadyProcessedAsync(message.QueueId, cancellationToken))
+                        if (!string.Equals(message.Topic?.Split('/').FirstOrDefault(), "battery", StringComparison.OrdinalIgnoreCase) ||
+                            !message.Topic.StartsWith("battery/log/", StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new InvalidOperationException($"Unsupported sync topic '{message.Topic}'. Flow 1 currently supports battery/log only.");
+                        }
+
+                        if (await IsAlreadyProcessedAsync(message.QueueId, cancellationToken))
+                        {
+                            alreadyProcessed.Add(message.QueueId);
+                            continue;
+                        }
+
+                        await ProcessBatteryLogAsync(message, community.ID, cancellationToken);
+                        await AddReceiptAsync(message.QueueId, batch.CommunityId, cancellationToken);
+                        processed.Add(message.QueueId);
+                    }
+
+                    await _db.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                }
+                catch
                 {
-                    alreadyProcessed.Add(message.QueueId);
-                    continue;
+                    await transaction.RollbackAsync(cancellationToken);
+                    throw;
                 }
-
-                await ProcessBatteryLogAsync(message, community.ID, cancellationToken);
-                await AddReceiptAsync(message.QueueId, batch.CommunityId, cancellationToken);
-                processed.Add(message.QueueId);
-            }
-
-            await _db.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            });
 
             return new CentralSyncResponse
             {
