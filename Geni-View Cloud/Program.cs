@@ -211,6 +211,7 @@ try
     builder.Services.AddScoped<GeniView.Cloud.Repository.DeviceEventsDataRepository>();
     builder.Services.AddScoped<GeniView.Cloud.Repository.DeviceEventRepository>();
     builder.Services.AddScoped<GeniView.Cloud.Repository.G3BatteryDataRepository>();
+    builder.Services.AddScoped<GeniView.Cloud.Services.CentralSyncProcessor>();
 
     // ── WCF → REST service classes (Phase 9) ────────────────────────────────
     builder.Services.AddScoped<GeniView.Cloud.Services.IApplicationUpdateService,

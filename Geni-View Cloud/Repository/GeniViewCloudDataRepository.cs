@@ -39,6 +39,7 @@ namespace GeniView.Cloud.Repository
         public virtual DbSet<Device> Devices { get; set; }
         public virtual DbSet<DeviceEvent> DeviceEvents { get; set; }
         public virtual DbSet<Group> Groups { get; set; }
+        public virtual DbSet<CentralSyncReceipt> CentralSyncReceipts { get; set; }
 
         public virtual DbSet<MailServer> MailServer { get; set; }
         public virtual DbSet<DeviceEventNotification> DeviceEventActionNotifications { get; set; }
@@ -78,6 +79,14 @@ namespace GeniView.Cloud.Repository
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<CentralSyncReceipt>(entity =>
+            {
+                entity.ToTable("CentralSyncReceipts");
+                entity.HasKey(x => x.QueueId);
+                entity.Property(x => x.CommunityID).IsRequired();
+                entity.Property(x => x.ProcessedAt).IsRequired();
+            });
 
             // EF6 used PluralizingTableNameConvention (entity class name → plural table name).
             // EF Core uses the DbSet property name as-is. Map each mismatched table explicitly.
