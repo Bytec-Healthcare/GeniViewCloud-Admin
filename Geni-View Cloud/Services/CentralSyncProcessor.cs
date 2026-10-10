@@ -38,7 +38,17 @@ namespace GeniView.Cloud.Services
             CancellationToken cancellationToken = default)
         {
             if (batch == null) throw new ArgumentNullException(nameof(batch));
-            if (batch.Messages == null || batch.Messages.Count == 0) return;
+            if (batch.Messages == null || batch.Messages.Count == 0)
+            {
+                return new CentralSyncResponse
+                {
+                    CommunityId = batch.CommunityId,
+                    Received = 0,
+                    Processed = 0,
+                    AlreadyProcessed = 0,
+                    ProcessedQueueIds = new List<long>()
+                };
+            }
 
             var community = await _db.Communities
                 .SingleOrDefaultAsync(x => x.CommunityID == batch.CommunityId, cancellationToken);
